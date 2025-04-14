@@ -5,29 +5,41 @@ import (
 
 	"github.com/arthuravila26/studies/go-project-1/go-gateway-api/internal/service"
 	"github.com/arthuravila26/studies/go-project-1/go-gateway-api/internal/web/handlers"
+	"github.com/arthuravila26/studies/go-project-1/go-gateway-api/internal/web/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
 type Server struct {
-	router *chi.Mux
-	server *http.Server
+	router         *chi.Mux
+	server         *http.Server
 	accountService *service.AccountService
-	port string
+	invoiceService *service.InvoiceService
+	port           string
 }
 
-func NewServer(accountService *service.AccountService, port string) *Server {
+func NewServer(accountService *service.AccountService, invoiceService *service.InvoiceService, port string) *Server {
 	return &Server{
-		router: chi.NewRouter(),
+		router:         chi.NewRouter(),
 		accountService: accountService,
-		port: port,
+		invoiceService: invoiceService,
+		port:           port,
 	}
 }
 
 func (s *Server) ConfigureRoutes() {
 	accountHandler := handlers.NewAccountHandler(s.accountService)
+	invoiceHandler := handlers.NewInvoiceHandler(s.invoiceService)
+	authMiddleware := middleware.NewAuthMiddleware(s.accountService)
 
 	s.router.Post("/accounts", accountHandler.Create)
 	s.router.Get("/accounts", accountHandler.Get)
+
+	s.router.Group(func(r chi.Router) {
+		r.Use(authMiddleware.Authenticate)
+		s.router.Post("/invoice", invoiceHandler.Create)
+		s.router.Get("/invoice/{id}", invoiceHandler.GetByID)
+		s.router.Get("/invoice", invoiceHandler.ListByAccount)
+	})
 }
 
 func (s *Server) Start() error {
@@ -35,6 +47,5 @@ func (s *Server) Start() error {
 		Addr:    ":" + s.port,
 		Handler: s.router,
 	}
-
 	return s.server.ListenAndServe()
 }
